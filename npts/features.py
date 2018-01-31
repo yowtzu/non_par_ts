@@ -33,6 +33,17 @@ class USHoliday(Feature):
         return index.isin(holidays)
 
 
+class HourOfDay(Feature):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.n_periods = 24
+
+    #NOT INDEXER, THEY'RE FEATURES
+
+    def indexer(self, index, column = None):
+        return index.hour
+
 class DayOfWeek(Feature):
 
     def __init__(self, **kwargs):
@@ -113,6 +124,31 @@ class DayOfQuarter(Feature):
                          pd.PeriodIndex(index, freq='Q'))])
 
 from pandas.tseries.offsets import BDay
+
+
+class BDayOfYear(Feature):
+    ## TODO merge with bdayofquarter
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.n_periods = 262
+
+    def indexer(self, index, column=None):
+        ## TODO fix this hacky thing (corner case not handled)
+        if len(index) == 0:
+            return np.array([])
+        bdays = pd.date_range(index.min(), index.max(), freq=BDay())
+        daycount = np.zeros(len(bdays))
+        count = 0
+        y = 0
+        for i, el in enumerate(bdays):
+            if el.year != y:
+                count = 0
+                y = el.year
+            daycount[i] = count
+            count += 1
+        result = pd.DataFrame(index=bdays, data=daycount).reindex(index).values[:,0]
+        return np.array(result, dtype=int)
+
 
 class BDayOfQuarter(Feature):
     def __init__(self, **kwargs):
