@@ -1,0 +1,5 @@
+name: pytimeseries-env
+dependencies:
+- python=3
+- scipy
+- pandas
