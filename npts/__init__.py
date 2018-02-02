@@ -1,2 +1,2 @@
 from .features import *
-from .npts import *
+from .baseline import Baseline

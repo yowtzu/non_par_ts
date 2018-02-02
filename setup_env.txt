@@ -1,0 +1,3 @@
+# first run:
+# source activate pytimeseries-env
+export PATH="/Users/enzo/repos/npts:$PATH"

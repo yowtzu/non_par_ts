@@ -16,21 +16,21 @@ class Feature(object):
 
 # DO WEEKEND WEEKDAY
 
-from pandas.tseries.holiday import USFederalHolidayCalendar
+#from pandas.tseries.holiday import USFederalHolidayCalendar
 
-class USHoliday(Feature):
+# class USHoliday(Feature):
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.n_periods = 2
-        self.cal = USFederalHolidayCalendar()
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+#         self.n_periods = 2
+#         self.cal = USFederalHolidayCalendar()
 
 
-    #NOT INDEXER, THEY'RE FEATURES
-    def indexer(self, index, column = None):
-        holidays = self.cal.holidays(start=index.min(),
-                                     end=index.max())
-        return index.isin(holidays)
+#     #NOT INDEXER, THEY'RE FEATURES
+#     def indexer(self, index, column = None):
+#         holidays = self.cal.holidays(start=index.min(),
+#                                      end=index.max())
+#         return index.isin(holidays)
 
 
 class HourOfDay(Feature):
@@ -116,10 +116,10 @@ class QuarterOfYear(Feature):
 class DayOfQuarter(Feature):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.n_periods = 93
+        self.n_periods = 92
 
     def indexer(self, index, column=None):
-        return np.array([(date - ts.start_time).days + 1
+        return np.array([(date - ts.start_time).days
                          for date, ts in zip(index,
                          pd.PeriodIndex(index, freq='Q'))])
 
