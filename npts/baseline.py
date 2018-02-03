@@ -32,7 +32,7 @@ class Baseline(object):
         self.indexers = [el.indexer for el in periods]
         self.periods = [el.n_periods for el in periods]
         self.K = len(periods)
-        self.verbose = False ## TODO fix this
+        self.verbose = True ## TODO fix this
         self.lambdas = [el.lambdas for el in periods]
         self.cum_periods = np.concatenate([[1],
             np.cumprod(self.periods)]).astype(int)

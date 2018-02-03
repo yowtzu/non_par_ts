@@ -2,6 +2,6 @@ name: pytimeseries-env
 dependencies:
 - python=3.6
 - scipy
-- pandas
+- pandas>=0.22
 - jupyter
 - matplotlib
