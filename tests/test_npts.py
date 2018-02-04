@@ -1,3 +1,4 @@
+import pandas as pd
 import unittest
 from npts.baseline import *
 from npts.features import MonthOfYear, DayOfWeek

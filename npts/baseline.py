@@ -1,6 +1,3 @@
-import datetime
-import time
-import pandas as pd
 import numpy as np
 import itertools
 import scipy.sparse as sp
@@ -251,6 +248,6 @@ class Baseline(object):
     def predict(self, index):
         predicted = self.theta[self._indexer(index)]
         if self.L == 1:
-            return predicted[:,0]
+            return predicted[:, 0]
         else:
             return predicted
