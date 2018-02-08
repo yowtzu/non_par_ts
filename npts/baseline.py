@@ -1,7 +1,12 @@
 import numpy as np
 import itertools
+import pandas as pd
 import scipy.sparse as sp
 import scipy.sparse.linalg as spl
+import time
+
+from .gradient_descent import BacktrackingGradientDescent
+
 
 
 def build_cyclic_diff(N, diff):
@@ -18,6 +23,7 @@ def build_block_diag_diff(N, diff, period):
 
 
 class Baseline(object):
+
     def __init__(self, *time_features):
         """Multi periodic smoother
         Args:
@@ -42,11 +48,13 @@ class Baseline(object):
 
     def make_reg_mats(self):
         """Build cyclic regularization matrices."""
-        self.Q = []
+        self.QTQ = []
+        print('building reg matrices')
         for i in range(len(self.cum_periods) - 1):
             diff = self.cum_periods[i]
             period = self.cum_periods[i + 1]
-            self.Q.append(build_block_diag_diff(self.N, diff, period))
+            Q = build_block_diag_diff(self.N, diff, period)
+            self.QTQ.append(Q.T@Q) # note this!
 
     def _indexer(self, index):
         return np.sum(
@@ -68,16 +76,12 @@ class Baseline(object):
         return P, x
 
     def _build_system(self, λ):
-        # TODO fix this
-        X = [[self.P_1 / np.sqrt(self.M_1)]]
-        #  note that i scale down by N
-        X += [[np.sqrt(λ[k] / self.N) * self.Q[k]]
-              for k in range(self.K)]
-        X = sp.bmat(X)
-        y = np.vstack([
-            np.matrix(self.x_1).T / np.sqrt(self.M_1),
-            np.zeros((self.N * self.K, self.L))])
-        return X, y
+        # build matrix and right hand side
+        mat = self.P_1.T @ self.P_1 / self.M_1
+        for k in range(self.K):
+            mat += self.QTQ[k] * λ[k]
+        rhs = self.P_1.T @ np.matrix(self.x_1).T / self.M_1
+        return mat, rhs
 
     def _compute_gradient(self, λ, theta, mat, val_res):
 
@@ -90,62 +94,53 @@ class Baseline(object):
         rhs = -(2 / self.M_2) * self.P_2.T @ val_res
 
         for j in range(self.L):
-            if self.verbose:
-                print(f'solving for column {j} (of {self.L}) of grad. partial term.')
-            grad_base[:, j], status = spl.cg(
-                mat, rhs[:, j],
-                x0=self._grad_cache[:, j])
-            if status != 0:
-                raise Exception("CG failed.")
-            self._grad_cache[:, j] = grad_base[:, j]
+            self._cg_solve(matrix=mat, vector=rhs[:, j],
+                           column=j, result=grad_base,
+                           cache=self._grad_cache)
 
         for i in range(len(λ)):
-            grad[i] = grad_base.T@self.Q[i].T@self.Q[i]@theta
+            grad[i] = grad_base.T@self.QTQ[i]@theta
+        print('grad of val. cost in the lambdas', grad)
 
         return grad
 
-    def _cg_solve(self, matrix, vector, result, cache):
-            result, status = spl.cg(matrix, vector, x0=cache)
-            if status != 0:
-                raise Exception("CG failed.")
-            cache = result
+    def _cg_solve(self, matrix, vector, column, result, cache):
+        #print([matrix[i, i] for i in range(5)])
+        s = time.time()
+        result[:, column], status = spl.cg(matrix, vector, x0=cache)
+        print(f'CG took {time.time()-s} seconds.')
+        if status != 0:
+            raise Exception("CG failed.")
+        cache[:, column] = result[:, column]
+
+    def _compute_res_costs(self, theta):
+        #val_pred = self.P_2@theta
+        #val_res = val_pred - self.x_2.reshape(val_pred.shape)
+        val_res = ((self.P_2@theta).T - self.x_2).T
+        print(val_res.shape)
+        #tr_pred = self.P_1@theta
+        #tr_res = tr_pred - self.x_1.reshape(tr_pred.shape)
+        tr_res = ((self.P_1@theta).T - self.x_1).T
+        print(tr_res.shape)
+        val_cost = np.linalg.norm(val_res)**2 / self.M_2
+        tr_cost = np.linalg.norm(tr_res)**2 / self.M_1
+        return val_res, val_cost, tr_res, tr_cost
 
     def _solve_problem(self, λ, compute_grad=True):
 
-        if self.verbose:
-            print(f'solving with λ={λ}')
+        print(f'solving with λ={λ}')
 
         theta = np.zeros((self.N, self.L))
 
-        X, y = self._build_system(λ)
-
-        print('building sparse mat')
-        mat = X.T@X
-        print('building dense rhs')
-        rhs = X.T @ y
+        mat, rhs = self._build_system(λ)
 
         for j in range(self.L):
-            if self.verbose:
-                print(f'solving (CG) for column {j} (of {self.L}) of theta')
-            theta[:, j], status = \
-                spl.cg(mat, rhs[:, j], x0=self._theta_cache[:, j])
-            if status != 0:
-                raise Exception("CG failed.")
-            self._theta_cache[:, j] = theta[:, j]
 
-        print('building val res')
-        val_pred = self.P_2@theta
-        val_res = val_pred - self.x_2.reshape(val_pred.shape)
-        print(val_res.shape)
-        print('building val cost')
-        # TODO maybe need to change for 2dim
-        val_cost = np.sum(val_res**2) / self.M_2
-        print('building train res')
-        tr_pred = self.P_1@theta
-        tr_res = tr_pred - self.x_1.reshape(tr_pred.shape)
-        print(tr_res.shape)
-        print('building train cost')
-        tr_cost = np.sum(tr_res**2) / self.M_1
+            self._cg_solve(matrix=mat, vector=rhs[:, j],
+                           column=j, result=theta,
+                           cache=self._theta_cache)
+
+        val_res, val_cost, tr_res, tr_cost = self._compute_res_costs(theta)
 
         if self.verbose:
             print(f'Tr. cost: {tr_cost:.3e}, val. cost: {val_cost:.3e}')
@@ -158,7 +153,7 @@ class Baseline(object):
             self._compute_gradient(λ, theta, mat, val_res) \
             if compute_grad else None
 
-    def grid_search_and_numerical_opt(self):
+    def grid_search_and_numerical_opt(self, initial_lambda):
 
         for lambda_val in itertools.product(*self.lambdas):
 
@@ -179,25 +174,50 @@ class Baseline(object):
 
                 def min_func(u_opt):
 
+                    print(f'Numerical optimization step with u = {u_opt}')
+
+                    lambdas_supplied = np.exp(u_opt)
+
                     λ = np.array(lambda_val)
-                    λ[[e is None for e in lambda_val]] = np.exp(u_opt)
+                    λ[[e is None for e in lambda_val]] = lambdas_supplied
                     λ = tuple(λ)
 
                     val_cost, tr_cost, theta, grad = \
                         self._solve_problem(λ)
 
-                    return val_cost, grad[[e is None for e in lambda_val]]
+                    print(f'numerical step val_cost = {val_cost}')
+
+                    # multiply grad so that it becomes 
+
+                    grad_used = grad[[e is None for e in lambda_val]]
+
+                    grad_used *= lambdas_supplied
+
+                    print(f'numerical gradient of val cost in u: {grad_used}')
+
+                    return val_cost, grad_used
+
+                if initial_lambda is None:
+                    lambda_0 = np.ones(opt_dimension)/self.N
+                else:
+                    lambda_0 = np.array(initial_lambda)
+                max_lambda = 1E5 * lambda_0
+                min_lambda = 1E-5 * lambda_0
+
+                print('u_0', np.log(lambda_0))
+                print('bounds', list(zip(np.log(min_lambda), np.log(max_lambda))))
 
                 from scipy.optimize import minimize
-                minimize(
+                opt = minimize(
                     min_func,
-                    np.zeros(opt_dimension),
+                    np.log(lambda_0),
                     method='L-BFGS-B', jac=True,
-                    bounds=[[-10, 10]] * opt_dimension,
-                    options={'ftol': 1E-3}
+                    bounds=list(zip(np.log(min_lambda), np.log(max_lambda))),
+                    options={'ftol': 1E-6}
                 )
+                print(opt)
 
-    def fit(self, data, train_frac=.8, seed=0):
+    def fit(self, data, train_frac=.8, seed=0, initial_lambda=None):
         """Fit cyclic baseline.
 
             - data is a pandas series, might have missing values
@@ -238,7 +258,7 @@ class Baseline(object):
         self._theta_cache = np.zeros((self.N, self.L))  # for cg warmstart
         self._grad_cache = np.zeros((self.N, self.L))  # for cg warmstart
 
-        self.grid_search_and_numerical_opt()
+        self.grid_search_and_numerical_opt(initial_lambda=initial_lambda)
 
         self.best_lambda = min(self.val_costs, key=self.val_costs.get)
         if self.verbose:
@@ -248,6 +268,6 @@ class Baseline(object):
     def predict(self, index):
         predicted = self.theta[self._indexer(index)]
         if self.L == 1:
-            return predicted[:, 0]
+            return pd.Series(data=predicted[:, 0], index=index)
         else:
-            return predicted
+            return pd.DataFrame(data=predicted, index=index)

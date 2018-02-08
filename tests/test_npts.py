@@ -47,8 +47,8 @@ class ModelTestCase(unittest.TestCase):
         self.assertEqual(self.baseline.lambdas, [[None], [None]])
         self.assertTrue((self.baseline.cum_periods == [1, 7, 84]).all())
 
-        mats = self.baseline.Q
-        self.assertTrue((mats[0].todense()[:2, :2] == small_mat[:2, :2]).all())
+        #  mats = self.baseline.Q
+        #  self.assertTrue((mats[0].todense()[:2, :2] == small_mat[:2, :2]).all())
 
     def test_LS_cost(self):
         X, y = self.baseline.make_LS_cost(data)
@@ -64,6 +64,18 @@ class ModelFitTestCase(unittest.TestCase):
             np.array(baseline.theta[2:5, 0]), [3, 4, 5]))
 
         print(baseline.theta)
+
+    def test_cost_residuals(self):
+        baseline = Baseline(MonthOfYear())
+        baseline.fit(data)
+        val_res, val_cost, tr_res, tr_cost = \
+            baseline._compute_res_costs(baseline.theta)
+        self.assertTrue(val_res.shape == (2,1))
+        self.assertTrue(tr_res.shape == (7,1))
+        self.assertTrue(np.alltrue(np.abs(tr_res) <= 1E-2))
+        self.assertTrue(np.alltrue(val_res != 0))
+        self.assertTrue(val_cost > 10)
+        self.assertTrue(val_cost < 11)
 
 
 if __name__ == '__main__':

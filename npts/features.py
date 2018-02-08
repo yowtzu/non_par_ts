@@ -178,14 +178,30 @@ class BDayOfQuarter(Feature):
         result = pd.DataFrame(index=bdays, data=daycount).reindex(
             index).values[:, 0]
         return np.array(result, dtype=int)
-
-
+        
 # class Columns(Feature):
 #     def __init__(self, columns):
 #         self.columns = columns
 #         self.n_periods = len(columns)
 #
 #     def indexer(self, index, column = None):
+
+class LunarPhase(Feature):
+
+    def __init__(self, n_periods=8, **kwargs):
+        super().__init__(**kwargs)
+        self.n_periods = n_periods
+
+    def lunations(self, timestamp):
+        """Lunations since Jan 1, 2001."""
+        diff = timestamp - pd.datetime(2001, 1, 1)
+        days = diff.days + diff.seconds / 86400
+        return 0.20439731 + days * 0.03386319269
+
+    def indexer(self, index, column=None):
+        lunations = self.lunations(index)
+        return (np.floor(self.n_periods * lunations + .5
+                         ).astype(int) % self.n_periods)
 
 
 class IntervalOfDay(Feature):
