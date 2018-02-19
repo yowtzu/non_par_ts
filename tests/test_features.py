@@ -15,6 +15,10 @@ class TimeFeatures(unittest.TestCase):
         self.assertEqual(0, DayOfYear().indexer(test_time_1))
         self.assertEqual(358, DayOfYear().indexer(test_time_2))
 
+    def test_week_of_year(self):
+        self.assertEqual(51, WeekOfYear().indexer(test_time_1))
+        self.assertEqual(51, WeekOfYear().indexer(test_time_2))
+
     # def test_us_holiday(self):
     #     self.assertEqual(0, USHoliday().indexer(test_time_1))
     #     self.assertEqual(1, USHoliday().indexer(test_time_2))

@@ -5,3 +5,4 @@ dependencies:
 - pandas>=0.22
 - jupyter
 - matplotlib
+- numba

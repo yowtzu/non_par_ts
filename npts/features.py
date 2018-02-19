@@ -84,6 +84,16 @@ class DayOfYear(Feature):
         return index.dayofyear - 1
 
 
+class WeekOfYear(Feature):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.n_periods = 53
+
+    def indexer(self, index, column=None):
+        return index.week - 1
+
+
 class MonthOfYear(Feature):
 
     def __init__(self, **kwargs):

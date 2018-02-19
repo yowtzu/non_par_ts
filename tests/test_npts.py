@@ -68,8 +68,10 @@ class ModelFitTestCase(unittest.TestCase):
     def test_cost_residuals(self):
         baseline = Baseline(MonthOfYear())
         baseline.fit(data)
-        val_res, val_cost, tr_res, tr_cost = \
-            baseline._compute_res_costs(baseline.theta)
+        tr_res, tr_cost = \
+            baseline._compute_res_costs(baseline.theta, baseline.P_1, baseline.x_1, baseline.M_1)
+        val_res, val_cost = \
+            baseline._compute_res_costs(baseline.theta, baseline.P_2, baseline.x_2, baseline.M_2)
         self.assertTrue(val_res.shape == (2,1))
         self.assertTrue(tr_res.shape == (7,1))
         self.assertTrue(np.alltrue(np.abs(tr_res) <= 1E-2))
