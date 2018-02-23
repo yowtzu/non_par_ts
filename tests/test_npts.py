@@ -54,8 +54,18 @@ class ModelTestCase(unittest.TestCase):
         X, y = self.baseline.make_LS_cost(data)
         self.assertTrue((np.arange(1, 10) == y).all())
 
+    def test_indexer(self):
+        indexed = self.baseline._indexer(pd.date_range(start=pd.datetime.today(), periods=10))
+        self.assertTrue(indexed.dtype == int)
+
 
 class ModelFitTestCase(unittest.TestCase):
+
+    def test_constant(self):
+        baseline = Baseline()
+        baseline.fit(data)
+        print(baseline.theta)
+        self.assertTrue(baseline.theta == 4.)
 
     def test_fit(self):
         baseline = Baseline(MonthOfYear())

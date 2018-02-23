@@ -8,6 +8,8 @@ import numba
 
 from .gradient_descent import BacktrackingGradientDescent
 
+##TODOS
+# clear caches after fit
 
 @numba.jit
 def build_cyclic_diff(N, diff):
@@ -59,9 +61,11 @@ class Baseline(object):
             self.QTQ.append(Q.T@Q)  # note this!
 
     def _indexer(self, index):
-        return np.sum(
-            indexer(index) * self.cum_periods[i]
-            for (i, indexer) in enumerate(self.indexers))
+        """From pandas index to index of θ array."""
+        result = np.zeros(len(index), dtype=int)
+        for (i, indexer) in enumerate(self.indexers):
+            result += indexer(index) * self.cum_periods[i]
+        return result
 
     def make_LS_cost(self, data):
         """Build LS penalty part of the system.
@@ -89,7 +93,7 @@ class Baseline(object):
         #print('mat', self.mat[:5, :5].todense())
         #print('rhs', self.model_rhs[:5])
 
-    def _compute_gradient(self, λ):
+    def _compute_gradient(self, λ, θ):
 
         if self.verbose:
             print('computing gradient of test cost in the lambdas')
@@ -106,18 +110,19 @@ class Baseline(object):
 
         for i in range(len(λ)):
             if self.L == 1.:
-                grad[i] = grad_base.T@self.QTQ[i]@self.thetas[λ]
+                grad[i] = grad_base.T@self.QTQ[i]@θ
             else:
-                grad[i] = grad_base@self.QTQ[i]@self.thetas[λ]
+                grad[i] = grad_base@self.QTQ[i]@θ
         print('grad of val. cost in the lambdas', grad)
 
         return grad
 
     def _cg_solve(self, matrix, vector, column, result, cache):
         # print([matrix[i, i] for i in range(5)])
-        # s = time.time()
+        s = time.time()
         result[:, column], status = spl.cg(matrix, vector, x0=cache[:, column])
-        # print(f'CG took {time.time()-s} seconds.')
+        if self.verbose:
+            print(f'CG took {time.time()-s} seconds.')
         if status != 0:
             raise Exception("CG failed.")
         cache[:, column] = result[:, column]
@@ -139,24 +144,28 @@ class Baseline(object):
 
         if self.verbose:
             print(f'solving with λ={λ}')
-        theta = np.zeros((self.N, self.L))
+        θ = np.zeros((self.N, self.L))
         self._build_system(λ)
 
         for j in range(self.L):
             self._cg_solve(matrix=self.mat, vector=self.model_rhs[:, j],
-                           column=j, result=theta,
+                           column=j, result=θ,
                            cache=self._theta_cache)
 
         self.val_res, self.val_costs[λ] = \
-            self._compute_res_costs(theta, self.P_2, self.x_2, self.M_2)
+            self._compute_res_costs(θ, self.P_2, self.x_2, self.M_2)
         if self.compute_tr_costs:
             _, self.tr_costs[λ] = \
-                self._compute_res_costs(theta, self.P_1, self.x_1, self.M_1)
+                self._compute_res_costs(θ, self.P_1, self.x_1, self.M_1)
         if self.verbose:
             print(f'Val. cost: {self.val_costs[λ]:.3e}')
-        self.thetas[λ] = theta
 
-        return self.val_costs[λ]
+        if self.best_lambda == λ:
+            self.theta = θ
+
+        #self.thetas[λ] = theta ##TODO drop thi
+
+        return θ, self.val_costs[λ]
 
     def grid_search_and_numerical_opt(self):
 
@@ -167,7 +176,7 @@ class Baseline(object):
 
             opt_dimension = sum([el is None for el in λ_outer])
             if opt_dimension == 0:
-                self._solve_problem(tuple(λ_outer))
+                θ, _ = self._solve_problem(tuple(λ_outer))
             else:
                 self._grad_descent_solve(λ_outer, opt_dimension)
 
@@ -185,15 +194,16 @@ class Baseline(object):
         def fun(u_opt):
             return self._solve_problem(u_opt_to_λ(u_opt))
 
-        def grad(u_opt):
-            tmp = self._compute_gradient(u_opt_to_λ(u_opt))
+        def grad(u_opt, θ):
+            tmp = self._compute_gradient(u_opt_to_λ(u_opt), θ)
             res = tmp[[e is None for e in λ_outer]]
             res *= np.exp(u_opt)
             print(f'numerical gradient of val cost in u: {res}')
             return res
 
         def min_func(u_opt):
-            return fun(u_opt), grad(u_opt)
+            θ, val_cost = fun(u_opt)
+            return val_cost, grad(u_opt, θ)
 
         #     print(f'Numerical optimization step with u = {u_opt}')
 
@@ -237,12 +247,17 @@ class Baseline(object):
         )
         print(opt)
 
+    @property
+    def best_lambda(self):
+        return min(self.val_costs, key=self.val_costs.get)
+
     def _select_model(self):
-        self.best_lambda = min(self.val_costs, key=self.val_costs.get)
         if self.verbose:
             print(f'Best λ = {self.best_lambda}')
-        self.theta = self.thetas[self.best_lambda]
-        del self.thetas
+        ## TODO post select
+
+        #self.theta = self.thetas[self.best_lambda]
+        #del self.thetas
 
     def _split_prepare_data(self, data, train_frac):
         data = data[~data.isnull()]
@@ -286,13 +301,18 @@ class Baseline(object):
         if compute_tr_costs:
             self.tr_costs = {}
         self.val_costs = {}
-        self.thetas = {}
+        #self.thetas = {}
 
         self._theta_cache = np.zeros((self.N, self.L))  # for cg warmstart
         self._grad_cache = np.zeros((self.N, self.L))  # for cg warmstart
 
         self.grid_search_and_numerical_opt()
         self._select_model()
+        self._clear_cache()
+
+    def _clear_cache(self):
+        del self._theta_cache
+        del self._grad_cache
 
     def predict(self, index):
         predicted = self.theta[self._indexer(index)]
