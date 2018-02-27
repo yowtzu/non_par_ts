@@ -256,13 +256,26 @@ class DaysSinceNewMoon(Feature):
 
 class IntervalOfDay(Feature):
 
-    def __init__(self, freq='5min', **kwargs):
+    def __init__(self, n_seconds=300, **kwargs):
         super().__init__(**kwargs)
-        """Return indexer at given (pandas) frequency."""
-        self.freq = freq
-        self.times = list(pd.date_range('2018-01-01', '2018-01-02',
-                                        freq=self.freq, closed='left').time)
-        self.n_periods = len(self.times)
-
+        """Return indexer of intervals of given length."""
+        self.n_seconds = n_seconds
+        self.n_periods = 86400 // n_seconds
+    
     def indexer(self, index, column=None):
-        return np.array([self.times.index(el) for el in index.time])
+        seconds = (index - pd.to_datetime(index.date)).seconds
+        return seconds // self.n_seconds
+
+
+# class IntervalOfDay(Feature):
+
+#     def __init__(self, freq='5min', **kwargs):
+#         super().__init__(**kwargs)
+#         """Return indexer at given (pandas) frequency."""
+#         self.freq = freq
+#         self.times = list(pd.date_range('2018-01-01', '2018-01-02',
+#                                         freq=self.freq, closed='left').time)
+#         self.n_periods = len(self.times)
+
+#     def indexer(self, index, column=None):
+#         return np.array([self.times.index(el) for el in index.time], dtype=int)

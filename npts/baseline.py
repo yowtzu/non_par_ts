@@ -265,7 +265,7 @@ class Baseline(object):
         self.M = len(data)
         self.L = data.shape[1] if len(data.shape) > 1 else 1
 
-        mask = np.random.uniform(size=len(data)) < train_frac
+        mask = np.random.uniform(size=len(data)) <= train_frac
 
         self.M_1 = sum(mask)
         self.M_2 = sum(~mask)
