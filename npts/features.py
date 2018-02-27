@@ -1,5 +1,8 @@
 import pandas as pd
 import numpy as np
+import ephem  # for moon phases
+
+from pandas.tseries.holiday import USFederalHolidayCalendar
 
 
 class Feature(object):
@@ -12,20 +15,6 @@ class Feature(object):
 # DO WEEKEND WEEKDAY
 
 #from pandas.tseries.holiday import USFederalHolidayCalendar
-
-# class USHoliday(Feature):
-
-#     def __init__(self, **kwargs):
-#         super().__init__(**kwargs)
-#         self.n_periods = 2
-#         self.cal = USFederalHolidayCalendar()
-
-
-#     #NOT INDEXER, THEY'RE FEATURES
-#     def indexer(self, index, column = None):
-#         holidays = self.cal.holidays(start=index.min(),
-#                                      end=index.max())
-#         return index.isin(holidays)
 
 
 class HourOfDay(Feature):
@@ -50,6 +39,30 @@ class DayOfWeek(Feature):
 
     def indexer(self, index, column=None):
         return index.dayofweek
+
+
+class Weekend(Feature):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.n_periods = 2
+
+    def indexer(self, index, column=None):
+        res = index.dayofweek.isin((5,6))
+        return np.array(res, dtype=int)
+
+
+class USHoliday(Feature):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.n_periods = 2
+        self.cal = USFederalHolidayCalendar()
+
+    def indexer(self, index, column = None):
+        holidays = self.cal.holidays(start=index.min()-pd.Timedelta('2d'),
+                                     end=index.max()+pd.Timedelta('2d'))
+        return np.isin(index.date, holidays.date)
 
 
 class DayOfWorkWeek(Feature):
@@ -104,15 +117,15 @@ class MonthOfYear(Feature):
         return index.month - 1
 
 
-class LunarPhase(Feature):
+# class LunarPhase(Feature):
 
-    def __init__(self, n_periods=4, **kwargs):
-        super().__init__(**kwargs)
-        self.n_periods = n_periods
+#     def __init__(self, n_periods=4, **kwargs):
+#         super().__init__(**kwargs)
+#         self.n_periods = n_periods
 
-    def indexer(self, index, column=None):
-        # TODO
-        pass
+#     def indexer(self, index, column=None):
+#         # TODO
+#         pass
 
 
 class QuarterOfYear(Feature):
@@ -196,22 +209,49 @@ class BDayOfQuarter(Feature):
 #
 #     def indexer(self, index, column = None):
 
-class LunarPhase(Feature):
+# class LunarPhase(Feature):
 
-    def __init__(self, n_periods=8, **kwargs):
+#     def __init__(self, n_periods=8, **kwargs):
+#         super().__init__(**kwargs)
+#         self.n_periods = n_periods
+
+#     def lunations(self, timestamp):
+#         """Lunations since Jan 1, 2001."""
+#         diff = timestamp - pd.datetime(2001, 1, 1)
+#         days = diff.days + diff.seconds / 86400
+#         return 0.20439731 + days * 0.03386319269
+
+#     def indexer(self, index, column=None):
+#         lunations = self.lunations(index)
+#         return (np.floor(self.n_periods * lunations + .5
+#                          ).astype(int) % self.n_periods)
+
+
+class DaysSinceNewMoon(Feature):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.n_periods = n_periods
+        self.n_periods = 30
 
-    def lunations(self, timestamp):
-        """Lunations since Jan 1, 2001."""
-        diff = timestamp - pd.datetime(2001, 1, 1)
-        days = diff.days + diff.seconds / 86400
-        return 0.20439731 + days * 0.03386319269
+    def indexer(self, index):
 
-    def indexer(self, index, column=None):
-        lunations = self.lunations(index)
-        return (np.floor(self.n_periods * lunations + .5
-                         ).astype(int) % self.n_periods)
+        res = np.empty_like(index, dtype=int)
+
+        moon_intervals = []
+        for i, ts in enumerate(index):
+
+            for interval in moon_intervals:
+                if ts >= interval[0] and ts <= interval[1]:
+                    res[i] = (ts - interval[0]).days
+                    break
+
+            else:
+                moon_intervals.append(
+                    (ephem.previous_new_moon(ts).datetime(),
+                        ephem.next_new_moon(ts).datetime())
+                )
+                res[i] = (ts - moon_intervals[-1][0]).days
+
+        return res
 
 
 class IntervalOfDay(Feature):

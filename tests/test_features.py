@@ -3,6 +3,8 @@ from npts.features import *
 
 test_time_1 = pd.DatetimeIndex([pd.Timestamp(2000,1,1,0,0,0)])
 test_time_2 = pd.DatetimeIndex([pd.Timestamp(2017,12,25,23,50,0)])
+test_time_3 = pd.DatetimeIndex([pd.Timestamp(2000,5,14,0,0,0)])
+
 
 class TimeFeatures(unittest.TestCase):
     """Tests for `features.py`."""
@@ -15,6 +17,10 @@ class TimeFeatures(unittest.TestCase):
         self.assertEqual(0, DayOfYear().indexer(test_time_1))
         self.assertEqual(358, DayOfYear().indexer(test_time_2))
 
+    def test_moon(self):
+        self.assertEqual(24, DaysSinceNewMoon().indexer(test_time_1))
+        self.assertEqual(7, DaysSinceNewMoon().indexer(test_time_2))
+
     def test_week_of_year(self):
         self.assertEqual(51, WeekOfYear().indexer(test_time_1))
         self.assertEqual(51, WeekOfYear().indexer(test_time_2))
@@ -26,6 +32,15 @@ class TimeFeatures(unittest.TestCase):
     def test_day_of_week(self):
         self.assertEqual(5, DayOfWeek().indexer(test_time_1))
         self.assertEqual(0, DayOfWeek().indexer(test_time_2))
+
+    def test_weekend(self):
+        self.assertEqual(1, Weekend().indexer(test_time_1))
+        self.assertEqual(0, Weekend().indexer(test_time_2))
+
+    def test_holiday(self):
+        self.assertEqual(0, USHoliday().indexer(test_time_1))
+        self.assertEqual(1, USHoliday().indexer(test_time_2))
+        self.assertEqual(0, USHoliday().indexer(test_time_3))
 
     def test_quarter_of_year(self):
         self.assertEqual(0, QuarterOfYear().indexer(test_time_1))
