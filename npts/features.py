@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import pandas as pd
 import numpy as np
 import ephem  # for moon phases
@@ -209,22 +212,24 @@ class BDayOfQuarter(Feature):
 #
 #     def indexer(self, index, column = None):
 
-# class LunarPhase(Feature):
+class LunarPhase(Feature):
 
-#     def __init__(self, n_periods=8, **kwargs):
-#         super().__init__(**kwargs)
-#         self.n_periods = n_periods
+    def __init__(self, n_periods=8, **kwargs):
+        super().__init__(**kwargs)
+        self.n_periods = n_periods
 
-#     def lunations(self, timestamp):
-#         """Lunations since Jan 1, 2001."""
-#         diff = timestamp - pd.datetime(2001, 1, 1)
-#         days = diff.days + diff.seconds / 86400
-#         return 0.20439731 + days * 0.03386319269
+    def lunations(self, timestamp):
+        """Lunations since Jan 1, 2001."""
+        diff = timestamp - pd.datetime(2001, 1, 1)
+        days = diff.days + diff.seconds / 86400
+        # this is orbit of moon relative to earth-sun axis
+        #return 0.20439731 + days * 0.03386319269
+        # this is orbit of moon relative to "stars"
+        return days * 0.0366
 
-#     def indexer(self, index, column=None):
-#         lunations = self.lunations(index)
-#         return (np.floor(self.n_periods * lunations + .5
-#                          ).astype(int) % self.n_periods)
+    def indexer(self, index, column=None):
+        lunations = self.lunations(index)
+        return (np.floor(self.n_periods * lunations + .5).astype(int) % self.n_periods)
 
 
 class DaysSinceNewMoon(Feature):
@@ -252,6 +257,34 @@ class DaysSinceNewMoon(Feature):
                 res[i] = (ts - moon_intervals[-1][0]).days
 
         return res
+
+
+class HalfDaysSinceNewMoon(Feature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.n_periods = 60
+
+    def indexer(self, index):
+
+        res = np.empty_like(index, dtype=int)
+
+        moon_intervals = []
+        for i, ts in enumerate(index):
+
+            for interval in moon_intervals:
+                if ts >= interval[0] and ts <= interval[1]:
+                    res[i] = (ts - interval[0]).hours / 12
+                    break
+
+            else:
+                moon_intervals.append(
+                    (ephem.previous_new_moon(ts).datetime(),
+                        ephem.next_new_moon(ts).datetime())
+                )
+                res[i] = (ts - moon_intervals[-1][0]).hours / 12
+
+        return res
+
 
 
 class IntervalOfDay(Feature):

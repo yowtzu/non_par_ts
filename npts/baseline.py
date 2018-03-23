@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import numpy as np
 import itertools
 import pandas as pd
@@ -7,6 +10,7 @@ import time
 import numba
 
 from .gradient_descent import BacktrackingGradientDescent
+from .fit import *
 
 ##TODOS
 # clear caches after fit
@@ -23,6 +27,7 @@ def build_block_diag_diff(N, diff, period):
     num_blocks = N // period
     assert(N / period == N // period)
     # print(f'Building block diag. with {num_blocks} blocks.')
+    ## TODO refactor, make a numba-friendly for-loop
     return sp.block_diag([build_cyclic_diff(period, diff)] * num_blocks)
 
 
@@ -249,7 +254,7 @@ class Baseline(object):
 
     @property
     def best_lambda(self):
-        return min(self.val_costs, key=self.val_costs.get)
+        return min_val_key(self.val_costs)
 
     def _select_model(self):
         if self.verbose:
@@ -259,27 +264,29 @@ class Baseline(object):
         #self.theta = self.thetas[self.best_lambda]
         #del self.thetas
 
-    def _split_prepare_data(self, data, train_frac):
+    def _split_prepare_data(self, data, train_frac, last_is_test, seed = 0):
         data = data[~data.isnull()]
 
         self.M = len(data)
         self.L = data.shape[1] if len(data.shape) > 1 else 1
 
-        mask = np.random.uniform(size=len(data)) <= train_frac
+        if last_is_test:
+            train, val = split_data_contiguous(data, train_frac)
+        else:
+            train, val = split_data_random(data, train_frac, seed)
 
-        self.M_1 = sum(mask)
-        self.M_2 = sum(~mask)
+        self.M_1, self.M_2 = len(train), len(val)
         assert(self.M == self.M_1 + self.M_2)
 
         if self.verbose:
             print(f'Fitting on {self.M} observations, of dimension {self.L}')
             print(f'Train set: {self.M_1} obs. Test set : {self.M_2} obs.')
 
-        self.P_1, self.x_1 = self.make_LS_cost(data[mask])
-        self.P_2, self.x_2 = self.make_LS_cost(data[~mask])
+        self.P_1, self.x_1 = self.make_LS_cost(train)
+        self.P_2, self.x_2 = self.make_LS_cost(val)
 
     def fit(self, data, train_frac=.8, seed=0, initial_lambda=None,
-            compute_tr_costs=False):
+            compute_tr_costs=False, last_is_test=False):
         """Fit cyclic baseline.
 
             - data is a pandas series, might have missing values
@@ -292,7 +299,7 @@ class Baseline(object):
         self.compute_tr_costs = compute_tr_costs
         self.initial_lambda = initial_lambda
 
-        self._split_prepare_data(data, train_frac)
+        self._split_prepare_data(data, train_frac, last_is_test)
 
         # look at provided lambdas
         if self.verbose:
